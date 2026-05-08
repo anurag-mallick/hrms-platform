@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jira Ticket Creator</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; padding-top: 50px; }
+        .container { max-width: 600px; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .btn-primary { background-color: #0052CC; border-color: #0052CC; }
+        .btn-primary:hover { background-color: #0040A8; border-color: #0040A8; }
+        #result { display: none; }
+        .nav-link.active { font-weight: bold; color: #0052CC !important; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4 shadow-sm">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">Jira Automator</a>
+            <div class="navbar-nav">
+                <a class="nav-link active" href="/">Single Create</a>
+                <a class="nav-link" href="/bulk">Bulk Create</a>
+                <a class="nav-link" href="/dashboard">Sprint Dashboard</a>
+                <a class="nav-link" href="/config">Settings</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h2 class="text-center mb-4">Create Jira Ticket</h2>
+        <form id="ticketForm">
+            <div class="mb-3">
+                <label for="project_key" class="form-label">Project Key</label>
+                <input type="text" class="form-control" id="project_key" name="project_key" value="{{ default_project }}" placeholder="e.g. ENG" required>
+            </div>
+            <div class="mb-3">
+                <label for="issue_type" class="form-label">Issue Type</label>
+                <select class="form-select" id="issue_type" name="issue_type">
+                    <option value="Task" selected>Task</option>
+                    <option value="Story">Story</option>
+                    <option value="Bug">Bug</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label for="summary" class="form-label">Summary</label>
+                <input type="text" class="form-control" id="summary" name="summary" placeholder="Short title" required>
+            </div>
+            <div class="mb-3">
+                <label for="description" class="form-label">Description</label>
+                <textarea class="form-control" id="description" name="description" rows="3" placeholder="Detailed description"></textarea>
+            </div>
+            <div class="mb-3">
+                <label for="assignee" class="form-label">Assignee</label>
+                <select class="form-select" id="assignee" name="assignee">
+                    <option value="">None</option>
+                    {% for a in assignees %}
+                    <option value="{{ a }}">{{ a }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="mb-3">
+                <label for="labels" class="form-label">Labels (comma separated)</label>
+                <input type="text" class="form-control" id="labels" name="labels" placeholder="label1, label2">
+            </div>
+            <div class="mb-3">
+                <label for="sprint" class="form-label">Sprint Name</label>
+                <input type="text" class="form-control" id="sprint" name="sprint" placeholder="Sprint 1">
+            </div>
+            <div class="d-grid">
+                <button type="submit" class="btn btn-primary" id="submitBtn">Create Ticket</button>
+            </div>
+        </form>
+
+        <div id="result" class="mt-4 alert">
+            <div id="resultMessage"></div>
+            <div id="ticketLink" class="mt-2"></div>
+            <div class="mt-3 d-grid">
+                <button type="button" class="btn btn-secondary" id="resetBtn">Create Another</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('ticketForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const resultDiv = document.getElementById('result');
+        const resultMessage = document.getElementById('resultMessage');
+        const ticketLink = document.getElementById('ticketLink');
+        const resetBtn = document.getElementById('resetBtn');
+
+        form.onsubmit = async (e) => {
+            e.preventDefault();
+            
+            submitBtn.disabled = true;
+            submitBtn.innerText = 'Creating Ticket... (Check Terminal)';
+            resultDiv.style.display = 'none';
+
+            const formData = new FormData(form);
+            const data = Object.fromEntries(formData.entries());
+
+            try {
+                const response = await fetch('/create-ticket', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json();
+
+                resultDiv.style.display = 'block';
+                if (result.success) {
+                    resultDiv.className = 'mt-4 alert alert-success';
+                    resultMessage.innerText = `Successfully created ticket: ${result.ticket_id}`;
+                    ticketLink.innerHTML = `<a href="${result.url}" target="_blank" class="btn btn-sm btn-outline-success">Open Ticket</a>`;
+                } else {
+                    resultDiv.className = 'mt-4 alert alert-danger';
+                    resultMessage.innerText = `Error: ${result.error}`;
+                    ticketLink.innerHTML = '';
+                }
+            } catch (error) {
+                resultDiv.style.display = 'block';
+                resultDiv.className = 'mt-4 alert alert-danger';
+                resultMessage.innerText = `Network error: ${error.message}`;
+                ticketLink.innerHTML = '';
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerText = 'Create Ticket';
+            }
+        };
+
+        resetBtn.onclick = () => {
+            form.reset();
+            resultDiv.style.display = 'none';
+            window.scrollTo(0, 0);
+        };
+    </script>
+</body>
+</html>

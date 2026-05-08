@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bulk Jira Creation</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; padding-top: 50px; }
+        .container { max-width: 1000px; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .btn-primary { background-color: #0052CC; border-color: #0052CC; }
+        .btn-primary:hover { background-color: #0040A8; border-color: #0040A8; }
+        #previewTableContainer { display: none; margin-top: 30px; }
+        .table-editable input { border: none; background: transparent; width: 100%; }
+        .table-editable input:focus { outline: 2px solid #0052CC; background: white; }
+        .form-select { border: none; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4 shadow-sm" style="position: fixed; top: 0; width: 100%; z-index: 1000;">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">Jira Automator</a>
+            <div class="navbar-nav">
+                <a class="nav-link" href="/">Single Create</a>
+                <a class="nav-link active" href="/bulk" style="font-weight: bold; color: #0052CC !important;">Bulk Create</a>
+                <a class="nav-link" href="/dashboard">Sprint Dashboard</a>
+                <a class="nav-link" href="/config">Settings</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container" style="margin-top: 70px;">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>Bulk Create Jira Tickets</h2>
+            <a href="/" class="btn btn-outline-secondary btn-sm">Back to Single Create</a>
+        </div>
+        
+        <div class="alert alert-info">
+            <strong>Instructions:</strong> Copy a range of cells from Excel/Google Sheets and paste them into the box below. 
+            Columns should be in this order: 
+            <span class="badge bg-secondary">Summary</span>, 
+            <span class="badge bg-secondary">Description</span>, 
+            <span class="badge bg-secondary">Issue Type</span>, 
+            <span class="badge bg-secondary">Assignee</span>, 
+            <span class="badge bg-secondary">Labels</span>, 
+            <span class="badge bg-secondary">Sprint</span>
+        </div>
+
+        <div class="mb-3">
+            <label for="pasteArea" class="form-label">Paste Table Data Here</label>
+            <textarea class="form-control" id="pasteArea" rows="8" placeholder="Paste your Excel rows here..."></textarea>
+        </div>
+        
+        <div class="mb-3">
+            <label for="project_key" class="form-label">Project Key</label>
+            <input type="text" class="form-control" id="project_key" value="{{ default_project }}" placeholder="e.g. ENG" required>
+        </div>
+
+        <div class="d-grid">
+            <button type="button" class="btn btn-primary" id="parseBtn">Parse and Preview</button>
+        </div>
+
+        <div id="previewTableContainer">
+            <h4 class="mb-3">Preview & Edit Tickets</h4>
+            <div class="table-responsive">
+                <table class="table table-bordered table-editable" id="previewTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Summary</th>
+                            <th>Description</th>
+                            <th>Type</th>
+                            <th>Assignee</th>
+                            <th>Labels</th>
+                            <th>Sprint</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div class="d-grid mt-4">
+                <button type="button" class="btn btn-success" id="createBulkBtn">Create All Tickets</button>
+            </div>
+        </div>
+
+        <div id="result" class="mt-4 alert" style="display:none;">
+            <div id="resultMessage"></div>
+            <div id="bulkResults" class="mt-3"></div>
+        </div>
+    </div>
+
+    <script>
+        // Assignees list passed from backend
+        const assignees = {{ assignees|tojson|safe }};
+
+        const pasteArea = document.getElementById('pasteArea');
+        const parseBtn = document.getElementById('parseBtn');
+        const previewContainer = document.getElementById('previewTableContainer');
+        const previewBody = document.querySelector('#previewTable tbody');
+        const createBulkBtn = document.getElementById('createBulkBtn');
+        const resultDiv = document.getElementById('result');
+        const resultMessage = document.getElementById('resultMessage');
+        const bulkResults = document.getElementById('bulkResults');
+
+        parseBtn.onclick = () => {
+            const rawData = pasteArea.value.trim();
+            if (!rawData) {
+                alert('Please paste some data first');
+                return;
+            }
+
+            const rows = rawData.split('\n');
+            previewBody.innerHTML = '';
+
+            rows.forEach(row => {
+                const cols = row.includes('|') ? row.split('|') : row.split('\t');
+                for (let i = 0; i < cols.length; i++) {
+                    cols[i] = cols[i].trim();
+                }
+                const tr = document.createElement('tr');
+                
+                for (let i = 0; i < 6; i++) {
+                    const td = document.createElement('td');
+                    if (i === 3) {
+                        const select = document.createElement('select');
+                        select.className = 'form-select';
+                        const defaultOption = document.createElement('option');
+                        defaultOption.value = '';
+                        defaultOption.textContent = 'None';
+                        select.appendChild(defaultOption);
+                        assignees.forEach(a => {
+                            const opt = document.createElement('option');
+                            opt.value = a;
+                            opt.textContent = a;
+                            select.appendChild(opt);
+                        });
+                        select.value = cols[i] || '';
+                        td.appendChild(select);
+                    } else {
+                        const input = document.createElement('input');
+                        input.value = cols[i] || '';
+                        td.appendChild(input);
+                    }
+                    tr.appendChild(td);
+                }
+                previewBody.appendChild(tr);
+            });
+
+            previewContainer.style.display = 'block';
+            window.scrollTo(0, document.body.scrollHeight);
+        };
+
+        createBulkBtn.onclick = async () => {
+            const projectKey = document.getElementById('project_key').value;
+            if (!projectKey) {
+                alert('Project Key is required');
+                return;
+            }
+
+            const tickets = [];
+            const rows = previewBody.querySelectorAll('tr');
+            rows.forEach(row => {
+                const cells = row.querySelectorAll('td');
+                const getCellValue = (idx) => {
+                    const cell = cells[idx];
+                    const input = cell.querySelector('input');
+                    const select = cell.querySelector('select');
+                    if (input) return input.value;
+                    if (select) return select.value;
+                    return '';
+                };
+                tickets.push({
+                    project_key: projectKey,
+                    summary: getCellValue(0),
+                    description: getCellValue(1),
+                    issue_type: getCellValue(2) || 'Task',
+                    assignee: getCellValue(3),
+                    labels: getCellValue(4),
+                    sprint: getCellValue(5)
+                });
+            });
+
+            createBulkBtn.disabled = true;
+            createBulkBtn.innerText = 'Creating Tickets...';
+            resultDiv.style.display = 'none';
+
+            try {
+                const response = await fetch('/create-bulk', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tickets })
+                });
+                const result = await response.json();
+
+                resultDiv.style.display = 'block';
+                if (result.success) {
+                    resultDiv.className = 'mt-4 alert alert-success';
+                    resultMessage.innerText = 'Bulk creation process completed!';
+                    
+                    let html = '<ul class="list-group">';
+                    result.results.forEach(item => {
+                        const res = item.result;
+                        if (res.success) {
+                            html += '<li class="list-group-item d-flex justify-content-between align-items-center">' +
+                                item.summary + 
+                                ' <a href="' + res.url + '" target="_blank" class="badge bg-success rounded-pill">' + res.ticket_id + '</a></li>';
+                        } else {
+                            html += '<li class="list-group-item list-group-item-danger d-flex justify-content-between align-items-center">' +
+                                item.summary + 
+                                ' <span>' + res.error + '</span></li>';
+                        }
+                    });
+                    html += '</ul>';
+                    bulkResults.innerHTML = html;
+                } else {
+                    resultDiv.className = 'mt-4 alert alert-danger';
+                    resultMessage.innerText = 'Error: ' + result.error;
+                    bulkResults.innerHTML = '';
+                }
+            } catch (error) {
+                resultDiv.style.display = 'block';
+                resultDiv.className = 'mt-4 alert alert-danger';
+                resultMessage.innerText = 'Network error: ' + error.message;
+            } finally {
+                createBulkBtn.disabled = false;
+                createBulkBtn.innerText = 'Create All Tickets';
+            }
+        };
+    </script>
+</body>
+</html>
+</content>
+<task_progress>- [x] Fix assignee dropdown value extraction
+- [x] Add assignee list to config page
+- [x] Make assignee dropdown in single create page
+- [ ] Fix sprint dashboard
+- [ ] Update README
+- [ ] Create GitHub repo and push code</task_progress>
+</write_to_file>
